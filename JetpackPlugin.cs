@@ -15,10 +15,10 @@ public class JetpackData
 public class JetpackPlugin : BasePlugin
 {
     public override string ModuleName => "Jailbreak Jetpack";
-    public override string ModuleVersion => "1.1.2";
+    public override string ModuleVersion => "1.1.3";
     public override string ModuleAuthor => "Custom";
     public override string ModuleDescription =>
-        "!jetpack ile ac/kapat, +jetpackuse ile istedigin tusa basili tutarak uc, !jetpackver <steamid64> ile (root) yetki ver";
+        "!jetpack ile ac/kapat, basili tutarak uc, !jetpackver <steamid64> ile yetki ver";
 
     private readonly Dictionary<ulong, bool> _jetpackActive = new();
     private readonly Dictionary<ulong, bool> _holdingKey = new();
@@ -28,8 +28,7 @@ public class JetpackPlugin : BasePlugin
     private string _dataPath = "";
 
     private const float MaxFuel = 100f;
-    // 4.5 saniye sürekli kullanım
-    private const float FuelUseRate = 22.22f;
+    private const float FuelUseRate = 22.22f; // ~4.5 saniye
     private const float FuelRegenRate = 20f;
     private const float ThrustPower = 260f;
     private const string AdminFlag = "@css/root";
@@ -39,11 +38,12 @@ public class JetpackPlugin : BasePlugin
         _dataPath = Path.Combine(ModuleDirectory, "jetpack_data.json");
         LoadData();
 
-        AddCommand("css_jetpack", "Jetpacki ac/kapat (bu hayat icin)", OnJetpackCommand);
-        AddCommand("css_jetpackver", "Bir oyuncuya kalici jetpack yetkisi ver (sadece root)", OnJetpackVerCommand);
+        AddCommand("css_jetpack", "Jetpacki ac/kapat", OnJetpackCommand);
+        AddCommand("css_jetpackver", "Jetpack yetkisi ver (root)", OnJetpackVerCommand);
 
-        AddCommand("+jetpackuse", "Jetpack itisini basli tut", OnJetpackKeyDown);
-        AddCommand("-jetpackuse", "Jetpack itisini birak", OnJetpackKeyUp);
+        // Hook ile aynı güvenilir yöntem
+        AddCommand("css_jetpackuse_on", "Jetpack basili tut", OnJetpackKeyDown);
+        AddCommand("css_jetpackuse_off", "Jetpack birak", OnJetpackKeyUp);
 
         RegisterListener<Listeners.OnTick>(OnTick);
         RegisterEventHandler<EventPlayerSpawn>(OnPlayerSpawn);
@@ -66,10 +66,7 @@ public class JetpackPlugin : BasePlugin
                 var json = File.ReadAllText(_dataPath);
                 _data = JsonSerializer.Deserialize<JetpackData>(json) ?? new JetpackData();
             }
-            else
-            {
-                SaveData();
-            }
+            else SaveData();
         }
         catch (Exception e)
         {
@@ -98,15 +95,11 @@ public class JetpackPlugin : BasePlugin
 
     private void OnJetpackCommand(CCSPlayerController? player, CommandInfo info)
     {
-        if (player == null || !player.IsValid)
-        {
-            info.ReplyToCommand("Bu komut sadece oyun icinden kullanilabilir.");
-            return;
-        }
+        if (player == null || !player.IsValid) return;
 
         if (!HasAccess(player))
         {
-            player.PrintToChat(" \x04[Jetpack]\x01 Bu ozellige sahip degilsin. Magazadan satin alabilirsin.");
+            player.PrintToChat(" \x04[Jetpack]\x01 Bu ozellige sahip degilsin.");
             return;
         }
 
@@ -118,12 +111,15 @@ public class JetpackPlugin : BasePlugin
         {
             _fuel[steamId] = MaxFuel;
             _holdingKey[steamId] = false;
-            player.PrintToChat(" \x04[Jetpack]\x01 ACIK. Istedigin tusa bind'ledin mi?");
-            player.PrintToChat(" \x04[Jetpack]\x01 Ornek: konsola yaz -> bind \"MOUSE4\" \"+jetpackuse\"");
+            player.PrintToChat(" \x04[Jetpack]\x01 ACIK");
+            player.PrintToChat(" \x04[Jetpack]\x01 Konsola yaz:");
+            player.PrintToChat(" \x04alias +jetpackuse \"css_jetpackuse_on\"");
+            player.PrintToChat(" \x04alias -jetpackuse \"css_jetpackuse_off\"");
+            player.PrintToChat(" \x04bind c \"+jetpackuse\"");
         }
         else
         {
-            player.PrintToChat(" \x04[Jetpack]\x01 \x02KAPATILDI\x01.");
+            player.PrintToChat(" \x04[Jetpack]\x01 KAPATILDI");
         }
     }
 
@@ -131,37 +127,35 @@ public class JetpackPlugin : BasePlugin
     {
         if (player != null && !AdminManager.PlayerHasPermissions(player, AdminFlag))
         {
-            player.PrintToChat(" \x02[Jetpack]\x01 Bu komutu kullanma yetkin yok. (root gerekli)");
+            player.PrintToChat(" \x02[Jetpack]\x01 Yetkin yok (root gerekli)");
             return;
         }
 
         if (info.ArgCount < 2)
         {
-            info.ReplyToCommand("Kullanim: !jetpackver <steamid64>  (ornek: 76561198000000000)");
+            info.ReplyToCommand("Kullanim: !jetpackver <steamid64>");
             return;
         }
 
         var targetSteamId = info.GetArg(1).Trim();
-
         if (!ulong.TryParse(targetSteamId, out _))
         {
-            info.ReplyToCommand("Gecersiz SteamID64. 17 haneli sayisal SteamID64 girmelisin.");
+            info.ReplyToCommand("Gecersiz SteamID64");
             return;
         }
 
         bool added = _data.AllowedSteamIds.Add(targetSteamId);
         SaveData();
 
-        if (added)
-            info.ReplyToCommand($"[Jetpack] SteamID {targetSteamId} icin jetpack yetkisi verildi ve kaydedildi.");
-        else
-            info.ReplyToCommand($"[Jetpack] SteamID {targetSteamId} zaten yetkiliydi.");
+        info.ReplyToCommand(added
+            ? $"[Jetpack] {targetSteamId} yetkisi verildi"
+            : $"[Jetpack] {targetSteamId} zaten yetkiliydi");
 
         var target = Utilities.GetPlayers().FirstOrDefault(p =>
             p.IsValid && p.AuthorizedSteamID != null &&
             p.AuthorizedSteamID.SteamId64.ToString() == targetSteamId);
 
-        target?.PrintToChat(" \x04[Jetpack]\x01 Artik jetpack kullanabilirsin! Acmak icin yaz: \x04!jetpack");
+        target?.PrintToChat(" \x04[Jetpack]\x01 Artik kullanabilirsin! Yaz: !jetpack");
     }
 
     private void OnJetpackKeyDown(CCSPlayerController? player, CommandInfo info)
