@@ -15,7 +15,7 @@ public class JetpackData
 public class JetpackPlugin : BasePlugin
 {
     public override string ModuleName => "Jailbreak Jetpack";
-    public override string ModuleVersion => "1.1.3";
+    public override string ModuleVersion => "1.1.4";
     public override string ModuleAuthor => "Custom";
     public override string ModuleDescription =>
         "!jetpack ile ac/kapat, basili tutarak uc, !jetpackver <steamid64> ile yetki ver";
@@ -27,9 +27,12 @@ public class JetpackPlugin : BasePlugin
     private JetpackData _data = new();
     private string _dataPath = "";
 
+    // ---- Ayarlar ----
     private const float MaxFuel = 100f;
-    private const float FuelUseRate = 22.22f; // ~4.5 saniye
-    private const float FuelRegenRate = 20f;
+    // 2.5 saniye sürekli kullanım (100 / 2.5 = 40)
+    private const float FuelUseRate = 40f;
+    // 10 saniyede tamamen dolsun (100 / 10 = 10)
+    private const float FuelRegenRate = 10f;
     private const float ThrustPower = 260f;
     private const string AdminFlag = "@css/root";
 
@@ -41,7 +44,6 @@ public class JetpackPlugin : BasePlugin
         AddCommand("css_jetpack", "Jetpacki ac/kapat", OnJetpackCommand);
         AddCommand("css_jetpackver", "Jetpack yetkisi ver (root)", OnJetpackVerCommand);
 
-        // Hook ile aynı güvenilir yöntem
         AddCommand("css_jetpackuse_on", "Jetpack basili tut", OnJetpackKeyDown);
         AddCommand("css_jetpackuse_off", "Jetpack birak", OnJetpackKeyUp);
 
@@ -220,21 +222,25 @@ public class JetpackPlugin : BasePlugin
             if (!_holdingKey.ContainsKey(steamId.Value)) _holdingKey[steamId.Value] = false;
 
             bool onGround = (pawn.Flags & (1 << 0)) != 0;
-            bool wantsThrust = _holdingKey[steamId.Value] && !onGround && _fuel[steamId.Value] > 0f;
+            bool isHolding = _holdingKey[steamId.Value];
+            bool wantsThrust = isHolding && !onGround && _fuel[steamId.Value] > 0f;
 
             if (wantsThrust)
             {
+                // Uçur
                 var velocity = pawn.AbsVelocity;
                 velocity.Z = ThrustPower;
                 pawn.Teleport(null, null, velocity);
 
+                // Yakıt tüket (2.5 saniyede biter)
                 _fuel[steamId.Value] = Math.Max(0f, _fuel[steamId.Value] - FuelUseRate / 64f);
 
                 int fuelPercent = (int)(_fuel[steamId.Value] / MaxFuel * 100f);
                 player.PrintToCenterHtml($"<font color='orange'>Jetpack Yakit: {fuelPercent}%</font>");
             }
-            else if (onGround && _fuel[steamId.Value] < MaxFuel)
+            else if (!isHolding && _fuel[steamId.Value] < MaxFuel)
             {
+                // Tuşa basılı değilken (havada da olsa) 10 saniyede dolsun
                 _fuel[steamId.Value] = Math.Min(MaxFuel, _fuel[steamId.Value] + FuelRegenRate / 64f);
             }
         }
