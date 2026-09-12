@@ -15,7 +15,7 @@ public class JetpackData
 public class JetpackPlugin : BasePlugin
 {
     public override string ModuleName => "Jailbreak Jetpack";
-    public override string ModuleVersion => "1.1.4";
+    public override string ModuleVersion => "1.1.6";
     public override string ModuleAuthor => "Custom";
     public override string ModuleDescription =>
         "!jetpack ile ac/kapat, basili tutarak uc, !jetpackver <steamid64> ile yetki ver";
@@ -23,16 +23,15 @@ public class JetpackPlugin : BasePlugin
     private readonly Dictionary<ulong, bool> _jetpackActive = new();
     private readonly Dictionary<ulong, bool> _holdingKey = new();
     private readonly Dictionary<ulong, float> _fuel = new();
-
     private JetpackData _data = new();
     private string _dataPath = "";
 
     // ---- Ayarlar ----
     private const float MaxFuel = 100f;
-    // 2.5 saniye sürekli kullanım (100 / 2.5 = 40)
-    private const float FuelUseRate = 40f;
-    // 10 saniyede tamamen dolsun (100 / 10 = 10)
-    private const float FuelRegenRate = 10f;
+    // 1.75 saniye sürekli kullanım (100 / 1.75 ≈ 57.143)
+    private const float FuelUseRate = 57.143f;
+    // 30 saniyede tamamen dolsun (100 / 30 ≈ 3.333)
+    private const float FuelRegenRate = 3.333f;
     private const float ThrustPower = 260f;
     private const string AdminFlag = "@css/root";
 
@@ -43,7 +42,6 @@ public class JetpackPlugin : BasePlugin
 
         AddCommand("css_jetpack", "Jetpacki ac/kapat", OnJetpackCommand);
         AddCommand("css_jetpackver", "Jetpack yetkisi ver (root)", OnJetpackVerCommand);
-
         AddCommand("css_jetpackuse_on", "Jetpack basili tut", OnJetpackKeyDown);
         AddCommand("css_jetpackuse_off", "Jetpack birak", OnJetpackKeyUp);
 
@@ -113,16 +111,14 @@ public class JetpackPlugin : BasePlugin
         {
             _fuel[steamId] = MaxFuel;
             _holdingKey[steamId] = false;
-            player.PrintToChat(" \x04[Jetpack]\x01 ACIK");
+
+            // Sadece bind talimatı (açıldı/kapandı yazmıyor)
             player.PrintToChat(" \x04[Jetpack]\x01 Konsola yaz:");
             player.PrintToChat(" \x04alias +jetpackuse \"css_jetpackuse_on\"");
             player.PrintToChat(" \x04alias -jetpackuse \"css_jetpackuse_off\"");
             player.PrintToChat(" \x04bind c \"+jetpackuse\"");
         }
-        else
-        {
-            player.PrintToChat(" \x04[Jetpack]\x01 KAPATILDI");
-        }
+        // Kapandığında chat mesajı yok
     }
 
     private void OnJetpackVerCommand(CCSPlayerController? player, CommandInfo info)
@@ -163,23 +159,19 @@ public class JetpackPlugin : BasePlugin
     private void OnJetpackKeyDown(CCSPlayerController? player, CommandInfo info)
     {
         if (player == null || !player.IsValid) return;
-
         var steamId = player.AuthorizedSteamID?.SteamId64;
         if (steamId == null) return;
 
         _holdingKey[steamId.Value] = true;
-        player.PrintToChat(" \x04[DEBUG]\x01 Jetpack tuşu BASILDI");
     }
 
     private void OnJetpackKeyUp(CCSPlayerController? player, CommandInfo info)
     {
         if (player == null || !player.IsValid) return;
-
         var steamId = player.AuthorizedSteamID?.SteamId64;
         if (steamId == null) return;
 
         _holdingKey[steamId.Value] = false;
-        player.PrintToChat(" \x04[DEBUG]\x01 Jetpack tuşu BIRAKILDI");
     }
 
     private HookResult OnPlayerSpawn(EventPlayerSpawn @event, GameEventInfo info)
@@ -187,6 +179,7 @@ public class JetpackPlugin : BasePlugin
         var steamId = @event.Userid?.AuthorizedSteamID?.SteamId64;
         if (steamId != null)
         {
+            // Yakıtı doldur, tuş durumunu sıfırla (aktif durumu KORU)
             _fuel[steamId.Value] = MaxFuel;
             _holdingKey[steamId.Value] = false;
         }
@@ -198,7 +191,7 @@ public class JetpackPlugin : BasePlugin
         var steamId = @event.Userid?.AuthorizedSteamID?.SteamId64;
         if (steamId != null)
         {
-            _jetpackActive[steamId.Value] = false;
+            // Sadece tuş durumunu sıfırla, jetpack aktif kalsın
             _holdingKey[steamId.Value] = false;
         }
         return HookResult.Continue;
@@ -232,7 +225,7 @@ public class JetpackPlugin : BasePlugin
                 velocity.Z = ThrustPower;
                 pawn.Teleport(null, null, velocity);
 
-                // Yakıt tüket (2.5 saniyede biter)
+                // Yakıt tüket (1.75 saniyede biter)
                 _fuel[steamId.Value] = Math.Max(0f, _fuel[steamId.Value] - FuelUseRate / 64f);
 
                 int fuelPercent = (int)(_fuel[steamId.Value] / MaxFuel * 100f);
@@ -240,7 +233,7 @@ public class JetpackPlugin : BasePlugin
             }
             else if (!isHolding && _fuel[steamId.Value] < MaxFuel)
             {
-                // Tuşa basılı değilken (havada da olsa) 10 saniyede dolsun
+                // Tuşa basılı değilken 30 saniyede dolsun
                 _fuel[steamId.Value] = Math.Min(MaxFuel, _fuel[steamId.Value] + FuelRegenRate / 64f);
             }
         }
