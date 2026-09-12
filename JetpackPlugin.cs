@@ -7,9 +7,6 @@ using CounterStrikeSharp.API.Modules.Utils;
 
 namespace JetpackPlugin;
 
-/// <summary>
-/// JSON dosyasina kaydedilen kalici veri: jetpack kullanma izni olan SteamID64'ler.
-/// </summary>
 public class JetpackData
 {
     public HashSet<string> AllowedSteamIds { get; set; } = new();
@@ -18,45 +15,34 @@ public class JetpackData
 public class JetpackPlugin : BasePlugin
 {
     public override string ModuleName => "Jailbreak Jetpack";
-    public override string ModuleVersion => "1.1.0";
+    public override string ModuleVersion => "1.1.1";
     public override string ModuleAuthor => "Custom";
     public override string ModuleDescription =>
         "!jetpack ile ac/kapat, +jetpackuse ile istedigin tusa basili tutarak uc, !jetpackver <steamid64> ile (root) yetki ver";
 
-    // Oyuncunun jetpack'i su an acik (equip edilmis) mi
     private readonly Dictionary<ulong, bool> _jetpackActive = new();
-
-    // Oyuncu su an kendi bind'ledigi tusu basili mi tutuyor
     private readonly Dictionary<ulong, bool> _holdingKey = new();
-
-    // Oyuncunun anlik yakiti (0-100)
     private readonly Dictionary<ulong, float> _fuel = new();
 
     private JetpackData _data = new();
     private string _dataPath = "";
 
-    // ---- Ayarlanabilir degerler ----
+    // ---- Ayarlar ----
     private const float MaxFuel = 100f;
-    // Toplam sürekli kullanımda ~6.5 saniyede biter (100 / 15.4 ~= 6.5s)
-    private const float FuelUseRate = 15.4f;
-    private const float FuelRegenRate = 20f;   // Yerdeyken saniyede dolan yakit
-    private const float ThrustPower = 260f;    // Yukari itis hizi (units/sn)
-    private const string AdminFlag = "@css/root"; // !jetpackver icin GEREKEN yetki (sadece root)
+    // 4.5 saniye sürekli kullanım (100 / 4.5 ≈ 22.22)
+    private const float FuelUseRate = 22.22f;
+    private const float FuelRegenRate = 20f;
+    private const float ThrustPower = 260f;
+    private const string AdminFlag = "@css/root";
 
     public override void Load(bool hotReload)
     {
         _dataPath = Path.Combine(ModuleDirectory, "jetpack_data.json");
         LoadData();
 
-        // "css_" onekli komutlar otomatik olarak hem konsol komutu hem de
-        // sohbet komutu (!jetpack, /jetpack) olur.
         AddCommand("css_jetpack", "Jetpacki ac/kapat (bu hayat icin)", OnJetpackCommand);
         AddCommand("css_jetpackver", "Bir oyuncuya kalici jetpack yetkisi ver (sadece root)", OnJetpackVerCommand);
 
-        // Oyuncunun kendi sectigi tusa bind'leyecegi basili-tut komutlari.
-        // Oyuncu konsoluna veya autoexec.cfg'sine sunu yazar:
-        //   bind "MOUSE4" "+jetpackuse"
-        // Istedigi HERHANGI bir tusa atayabilir, sunucu tarafinda bir sey degismez.
         AddCommand("+jetpackuse", "Jetpack itisini basli tut", OnJetpackKeyDown);
         AddCommand("-jetpackuse", "Jetpack itisini birak", OnJetpackKeyUp);
 
@@ -71,8 +57,6 @@ public class JetpackPlugin : BasePlugin
     {
         SaveData();
     }
-
-    // ---------------- Veri kaydetme/yukleme ----------------
 
     private void LoadData()
     {
@@ -113,8 +97,6 @@ public class JetpackPlugin : BasePlugin
         return steamId != null && _data.AllowedSteamIds.Contains(steamId.SteamId64.ToString());
     }
 
-    // ---------------- Komutlar ----------------
-
     private void OnJetpackCommand(CCSPlayerController? player, CommandInfo info)
     {
         if (player == null || !player.IsValid)
@@ -148,7 +130,6 @@ public class JetpackPlugin : BasePlugin
 
     private void OnJetpackVerCommand(CCSPlayerController? player, CommandInfo info)
     {
-        // player == null ise komut sunucu konsolundan/rcon'dan calistiriliyordur, izin verilir.
         if (player != null && !AdminManager.PlayerHasPermissions(player, AdminFlag))
         {
             player.PrintToChat(" \x02[Jetpack]\x01 Bu komutu kullanma yetkin yok. (root gerekli)");
@@ -184,7 +165,6 @@ public class JetpackPlugin : BasePlugin
         target?.PrintToChat(" \x04[Jetpack]\x01 Artik jetpack kullanabilirsin! Acmak icin yaz: \x04!jetpack");
     }
 
-    // Oyuncu kendi bind'ledigi tusa BASTIGINDA calisir
     private void OnJetpackKeyDown(CCSPlayerController? player, CommandInfo info)
     {
         var steamId = player?.AuthorizedSteamID?.SteamId64;
@@ -192,15 +172,12 @@ public class JetpackPlugin : BasePlugin
         _holdingKey[steamId.Value] = true;
     }
 
-    // Oyuncu tusu BIRAKTIGINDA calisir
     private void OnJetpackKeyUp(CCSPlayerController? player, CommandInfo info)
     {
         var steamId = player?.AuthorizedSteamID?.SteamId64;
         if (steamId == null) return;
         _holdingKey[steamId.Value] = false;
     }
-
-    // ---------------- Oyun olaylari ----------------
 
     private HookResult OnPlayerSpawn(EventPlayerSpawn @event, GameEventInfo info)
     {
@@ -223,8 +200,6 @@ public class JetpackPlugin : BasePlugin
         }
         return HookResult.Continue;
     }
-
-    // ---------------- Ana dongu: itis + yakit + HUD ----------------
 
     private void OnTick()
     {
