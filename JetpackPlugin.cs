@@ -15,7 +15,7 @@ public class JetpackData
 public class JetpackPlugin : BasePlugin
 {
     public override string ModuleName => "Jailbreak Jetpack";
-    public override string ModuleVersion => "1.1.1";
+    public override string ModuleVersion => "1.1.2";
     public override string ModuleAuthor => "Custom";
     public override string ModuleDescription =>
         "!jetpack ile ac/kapat, +jetpackuse ile istedigin tusa basili tutarak uc, !jetpackver <steamid64> ile (root) yetki ver";
@@ -27,9 +27,8 @@ public class JetpackPlugin : BasePlugin
     private JetpackData _data = new();
     private string _dataPath = "";
 
-    // ---- Ayarlar ----
     private const float MaxFuel = 100f;
-    // 4.5 saniye sürekli kullanım (100 / 4.5 ≈ 22.22)
+    // 4.5 saniye sürekli kullanım
     private const float FuelUseRate = 22.22f;
     private const float FuelRegenRate = 20f;
     private const float ThrustPower = 260f;
@@ -167,16 +166,24 @@ public class JetpackPlugin : BasePlugin
 
     private void OnJetpackKeyDown(CCSPlayerController? player, CommandInfo info)
     {
-        var steamId = player?.AuthorizedSteamID?.SteamId64;
+        if (player == null || !player.IsValid) return;
+
+        var steamId = player.AuthorizedSteamID?.SteamId64;
         if (steamId == null) return;
+
         _holdingKey[steamId.Value] = true;
+        player.PrintToChat(" \x04[DEBUG]\x01 Jetpack tuşu BASILDI");
     }
 
     private void OnJetpackKeyUp(CCSPlayerController? player, CommandInfo info)
     {
-        var steamId = player?.AuthorizedSteamID?.SteamId64;
+        if (player == null || !player.IsValid) return;
+
+        var steamId = player.AuthorizedSteamID?.SteamId64;
         if (steamId == null) return;
+
         _holdingKey[steamId.Value] = false;
+        player.PrintToChat(" \x04[DEBUG]\x01 Jetpack tuşu BIRAKILDI");
     }
 
     private HookResult OnPlayerSpawn(EventPlayerSpawn @event, GameEventInfo info)
@@ -218,7 +225,7 @@ public class JetpackPlugin : BasePlugin
             if (!_fuel.ContainsKey(steamId.Value)) _fuel[steamId.Value] = MaxFuel;
             if (!_holdingKey.ContainsKey(steamId.Value)) _holdingKey[steamId.Value] = false;
 
-            bool onGround = (pawn.Flags & (1 << 0)) != 0; // FL_ONGROUND
+            bool onGround = (pawn.Flags & (1 << 0)) != 0;
             bool wantsThrust = _holdingKey[steamId.Value] && !onGround && _fuel[steamId.Value] > 0f;
 
             if (wantsThrust)
